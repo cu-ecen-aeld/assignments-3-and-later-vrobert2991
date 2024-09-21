@@ -1,5 +1,11 @@
 #include "systemcalls.h"
-
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -16,7 +22,17 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
+    int ret = system(cmd);
+    if (cmd == NULL)
+    {
+        ret == 0 ? perror("CMD is NULL and no shell available"):perror("CMD is NULL");
+        return false;
+    }        
+    if (ret == -1)
+    {
+        perror("Child creation failed.");
+        return false;
+    }
     return true;
 }
 
@@ -45,9 +61,9 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
+    va_end(args);
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
 
 /*
  * TODO:
@@ -58,9 +74,26 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    int pid = fork();
 
-    va_end(args);
-
+    if (pid == -1)
+        return false;
+    
+    if (pid == 0)
+    {
+        if(execv(command[0],command)==-1)
+            exit(EXIT_FAILURE);
+    } else {
+        int status;
+        waitpid (pid, &status, 0);
+            
+        if (WIFEXITED (status))
+        {
+            if(WEXITSTATUS (status)!=0){
+                return false;
+            }
+        }
+    }
     return true;
 }
 
@@ -92,6 +125,39 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    umask(0);
+    int fd = open(outputfile,  O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    
+    if (fd == -1)
+        return false;
+        
+    int pid = fork();
+
+    if (pid == -1)
+        return false;
+    
+    if (pid == 0)
+    {
+        if (dup2(fd, 1) < 0)
+        {
+            close(fd);
+            return false;
+        }
+        close(fd);
+        if(execv(command[0],command)==-1)
+            exit(EXIT_FAILURE);
+    } else {
+        close(fd);
+        int status;
+        waitpid (pid, &status, 0);
+            
+        if (WIFEXITED (status))
+        {
+            if(WEXITSTATUS (status)!=0){
+                return false;
+            }
+        }
+    }
 
     va_end(args);
 
